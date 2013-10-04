@@ -37,21 +37,24 @@ struct struct_line{
 
 };
 
-mutex m;
+
 
 class str_op{
 public:
 	template<typename T>
+	//Covert a string to number
 	T StringToNumber(const string &Text){
 		stringstream ss(Text);
 		T result;
 		return ss >> result ? result : 0;
 	}
+	//checking whether a line is blank
 	bool isblank(string &str){
 		if(strlen(str.c_str())==0)
 			return true;
 		return false;
 	}
+	//delete the multiple white space
 	vector<string> split(string str, char c = ' '){
 		vector<string> result;
 		stringstream s(str);
@@ -80,21 +83,27 @@ class Play{
 			playname = playname_;
 			counter = 1;
 		}
-
+		/*Print out the character line in sequence
+		 *Compare the line number to a counter which starts with 1
+		 *when the counter is equal to the line number
+		 *the line is allowed to print, then the counter will be incremented
+		 *Otherwise, the line should wait till the counter reaches its number*/
 		void recite(vector<struct_line>::iterator &it){
 			unique_lock<mutex> lk(mut);
 			if(counter > it -> num)
 			{
-				//check if counter valid
-				cerr << "oops, counter got too large!!" << endl;
+				//check if counter valid, counter shouldn't be greater than the line number
+				cerr << "Sorry, there must be bad format in the file" << endl;
 				it++;
 				con.notify_all();
 				return;
 			}
-			con.wait(lk, [=]{return counter == it->num;});
 			//compare current character 
+			con.wait(lk, [=]{return this->counter == it->num;});
+			//check whether it is a new character's line
 			if(it -> charname != curr_char){cout << endl << it -> charname << endl; curr_char = it -> charname;}
 			cout << it -> text << endl;
+			//increment the iterator as well as the counter
 			it++, counter++;
 			lk.unlock();
 			con.notify_all();
@@ -104,17 +113,31 @@ class Play{
 
 class Player{
 public:
+	/*A construtor which intialize the reference member variable with the reference
+	 *that is passed to the constructor
+	 *Also default construct the _playThread */
 	Player(Play& Object, const string& charName, ifstream& inputFile) : 
 		_playObject(Object),
 		_char_name(charName),
-		_inputFile(inputFile),
-		_playerThread(thread())
-	{}
+		_inputFile(inputFile)
+	{_playerThread=thread();}
+	/* Overload the copy constructor
+	 *prevent copying the thread member variable*/
+	Player(const Player& _player):
+			_playObject(_player._playObject),
+			_char_name(_player._char_name),
+			_inputFile(_player._inputFile)
+	{
+		_playerThread=thread();
+	}
+	/* read lines in the character file that passed to the play object
+	 *ignore the badly formatted line
+	 *store each line in the struct_line
+	 *push each struct_line into a container*/
 	void read(){
 		str_op op;
 		string str;
 		while(!_inputFile.eof()){
-			cout<<"we are here"<<_char_name<<endl;
 			getline(_inputFile,str);
 			if(op.isblank(str) || (str.find_first_of(" ") == string::npos) )
 				continue;
@@ -130,28 +153,34 @@ public:
 				str_line.text = text;
 
 			inner_data.push_back(str_line);
-		}
-	}
 
+		}
+		return;
+	}
+	/*Create a iterator of the struct_line container
+	 *iterate the container 
+	 *For every struct_line the iterator positioned at
+	 *call recite method of the play object passed to the object 
+	 *then print out the line in sequence*/
 	void act(){
 		vector<struct_line>::iterator it = inner_data.begin();
-		while(it <= inner_data.end())
+		while(it < inner_data.end())
 		{
 			_playObject.recite(it);
-			it++;
 		}
+		return;
 	}
-
+	/* For each player object created
+	 *Launch a new thread to execute the read and act method*/
 	void enter(){
-		cout << _char_name << "ok" << endl;
-		cout << _inputFile << endl;
-		thread _t([&](){
+		thread _t([this]{
 			this->read();
 			this->act();
 		});
-		_playerThread = move(_t);
-	}
 
+		_playerThread=move(_t);
+	}
+	/*call the join method on each thread spawned*/
 	void exit()
 	{
 		if(_playerThread.joinable()) 
@@ -159,20 +188,13 @@ public:
 	}
 
 private:
-	vector<struct_line> inner_data;
-	thread& _playerThread;
-	Play& _playObject;
-	const string& _char_name;
-	ifstream& _inputFile;
+	vector<struct_line> inner_data;//container of struct_line 
+	thread _playerThread;//a thread to launch for every player object
+	Play& _playObject;//reference to the play object
+	const string& _char_name;//reference to the character name
+	ifstream& _inputFile; //reference to the character file
 
 };
-
-/**
- *  function that's used to launch separate thread per valid line in configuration file.
- *  The actual validation is done in main itself.
- *  this function makes sure that each line in the fragment is well formed, if yes, prepares an instance of struct_line
- *  and pushes into play object. The play object itself hold mutex while doing the insert.
- */
 
 
 int main(int argc, char* argv[]){
@@ -207,9 +229,9 @@ int main(int argc, char* argv[]){
 		//should have playname by now. ready to initialize the class 
 		Play play(playname);
 		string str="";
-		vector<Player> players;
-		vector<string> charstrs;
-		vector<ifstream> files;
+		vector<Player> players;//To store the multiple player object
+		vector<string> charstrs;//To store all the character name that is detected from the configuration file
+		vector<ifstream> files;//To store all the character file that is detected from the configuration file
 		//read one line at a time, validate that its well formed and based on that prepare threads to be launched.
 		unsigned int i = 0;
 		while(!ifs.eof()){
@@ -233,21 +255,24 @@ int main(int argc, char* argv[]){
 				 cout << "ignoring line as file is in accessible " <<  str << endl;
 				 continue;
 			 }
+			 //push the character name and the file to the vector
 			 charstrs.push_back(move(charname));
 			 files.push_back(move(playfilefs));
 			 i++;
-
 		}
-	   for(unsigned int j = 0; j < i; j++){
-			Player player = Player(ref(play), ref(charstrs[j]), ref(files[j]));
-			 players.push_back(player);
-	   }
-	   for(unsigned int j = 0; j < i; j++){
-			players[i].enter();
-	   }
-	   for(unsigned int j = 0; j < i; j++){
-			players[i].exit();
-	   }
+		//for each character, create a player object
+	    for(unsigned int j = 0; j <= i-1; j++){
+			 Player player = Player(ref(play), ref(charstrs[j]), ref(files[j]));
+			 players.push_back(move(Player(ref(play), ref(charstrs[j]), ref(files[j]))));
+	    }
+		//call the enter method for all the player objects
+	    for(unsigned int j = 0; j <= i-1; j++){
+			 players[j].enter();
+	    }
+		//call the exit method for all the player objects
+	    for(unsigned int j = 0; j <= i-1; j++){
+			 players[j].exit();
+	    }
 
 		return 0;
 	}else{
