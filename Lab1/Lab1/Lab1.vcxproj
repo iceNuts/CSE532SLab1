@@ -63,6 +63,14 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp" />
+    <ClCompile Include="Play.cpp" />
+    <ClCompile Include="Player.cpp" />
+    <ClCompile Include="str_op.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Play.h" />
+    <ClInclude Include="Player.h" />
+    <ClInclude Include="str_op.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
