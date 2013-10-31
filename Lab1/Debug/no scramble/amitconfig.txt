@@ -1,5 +1,0 @@
-This is my play 
-King King.txt
-Queen Queen.txt
-Rosencrantz Rosencrantz.txt
-Guildenstern Guildenstern.txt
